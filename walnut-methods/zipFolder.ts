@@ -5,47 +5,33 @@ import * as archiver from 'archiver';
 
 /** @walnut_method
  * name: Zip Folder
- * description: Creates a zip archive from a specified folder
+ * description: Creates a zip archive from ${folderPath} to ${outputPath}
  * actionType: custom_zip_folder
  * context: shared
  * needsLocator: false
  * category: Data Processing
  */
 export async function zipFolder(ctx: WalnutContext) {
-  const sourceFolderPath = ctx.params.sourcePath;
-  const outputZipPath = ctx.params.outputPath || ctx.params.sourcePath + '.zip';
-  
-  ctx.log(`Starting to zip folder: ${sourceFolderPath}`);
-  
+  // ctx.args contains resolved values from ${...} placeholders in the step description
+  // e.g. step description "${folderPath}" with test data { folderPath: "/tmp/data" } → ctx.args[0] = "/tmp/data"
+  const sourcePath = ctx.args[0];
+  const outputPath = ctx.args[1] || sourcePath + '.zip';
+
+  ctx.log('Zipping folder: ' + sourcePath);
+
   return new Promise<void>((resolve, reject) => {
-    // Create output stream
-    const output = fs.createWriteStream(outputZipPath);
-    const archive = archiver('zip', {
-      zlib: { level: 9 } // Maximum compression
-    });
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
     
-    // Listen for completion
     output.on('close', () => {
-      const totalBytes = archive.pointer();
-      ctx.log(`Zip archive created successfully: ${outputZipPath} (${totalBytes} bytes)`);
-      ctx.setVariable('zipPath', outputZipPath);
-      ctx.setVariable('zipSize', totalBytes);
+      ctx.log('Created ' + outputPath + ' (' + archive.pointer() + ' bytes)');
+      ctx.setVariable('zipPath', outputPath);
       resolve();
     });
     
-    // Handle errors
-    archive.on('error', (err: Error) => {
-      ctx.warn(`Error creating zip archive: ${err.message}`);
-      reject(err);
-    });
-    
-    // Pipe archive data to the output file
+    archive.on('error', reject);
     archive.pipe(output);
-    
-    // Add the folder to the archive
-    archive.directory(sourceFolderPath, false);
-    
-    // Finalize the archive
+    archive.directory(sourcePath, false);
     archive.finalize();
   });
 }
